@@ -38,7 +38,7 @@ If you need to fix errors or If you want to process another set of pictures, ent
 
 ## Installation
 
-Along with the applications, the icons directory supplied in the repository must be in the same directory that the application is run from.
+The source for the icons displayed in Google Earth is available in the Icons.zip file in the repository.  Unzip the  Icons directory make sure it is in the same directory that the application is run from.
 
 ## Viewing Pictures from Google Earth
 
