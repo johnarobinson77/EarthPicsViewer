@@ -123,8 +123,14 @@ public class EarthPicsViewer {
                 this.dstFileName = dstFileName;
                 location = picLocations.add();
                 // parse time and add it to location data
-                String origDate = jpegMetadata.findEXIFValueWithExactMatch(
-                        ExifTagConstants.EXIF_TAG_DATE_TIME_ORIGINAL).getStringValue();
+                String origDate = null;
+                if (jpegMetadata.findEXIFValueWithExactMatch(
+                        ExifTagConstants.EXIF_TAG_DATE_TIME_ORIGINAL)!=null) {
+                    origDate = jpegMetadata.findEXIFValueWithExactMatch(
+                            ExifTagConstants.EXIF_TAG_DATE_TIME_ORIGINAL).getStringValue();
+                } else {
+                    throw new ImageReadException("Date Read Error");
+                }
                 DateFormat df = new SimpleDateFormat("yyyy:MM:dd hh:mm:ss");
                 Timestamp ts = new Timestamp(((java.util.Date) df.parse(origDate)).getTime());
                 location.setTimestampMs(ts);
@@ -281,13 +287,13 @@ public class EarthPicsViewer {
     // builds the KML file
     public static class LocHier {
         final static int childLimit = 10;
-        final static long windowLimit = (long)((1.0/69.0) / 10.0 * 10e7); //~ 528 feet.
+        final static long windowLimit = (long)((1.0/69.0) / 100.0 * 10e7); //~ 52.8 feet.
         final static int windowDivisor = 10;
         final static SimpleDateFormat dateFormat = new SimpleDateFormat("MM/dd/yyyy");
         final static SimpleDateFormat timeFormat = new SimpleDateFormat("MM/dd/yyyy HH:mm:ss");
         static PicturesMdata picturesMdata = null;
         static String outputFolderName = null;
-        static HashSet<String> iconList = new HashSet<>();
+        static HashSet<String> iconList = null;
         ArrayList<LocHier> childLocHier = null;
         DBSCAN_Clusters.Cluster cluster = null;
         long[] window = new long[2];
@@ -295,6 +301,7 @@ public class EarthPicsViewer {
         public LocHier(PicturesMdata picturesMdata, String outputFolderName){
             LocHier.picturesMdata = picturesMdata;
             LocHier.outputFolderName = new String(outputFolderName);
+            iconList = new HashSet<>();
         }
 
         public LocHier(){}
@@ -328,7 +335,7 @@ public class EarthPicsViewer {
             ArrayList<Integer> locIdx = cluster.clusterIdxs();
 
             long[] latLonTime = new long[2];
-            if (locIdx.size() > childLimit || window[0] > windowLimit) {
+            if (locIdx.size() > childLimit && window[0] > windowLimit) {
                 // build a KdTree from the input data
                 KdTreeEx<Integer> fKdTree = new KdTreeEx<Integer>((int)locIdx.size(), 2);
                 fKdTree.setNumThreads(cores);
@@ -629,12 +636,12 @@ public class EarthPicsViewer {
                 }
             }
             catch(ParseException | IOException | ImageReadException e) {
-                e.printStackTrace();
                 inputForm.messageAppendLn("Read Error on file " + fn);
                 inputForm.messageAppendLn(e.getMessage());
                 System.out.println("Read Error on file " + fn);
                 System.out.println(e.getMessage());
                 if (!(e instanceof ImageReadException)) return;
+                else e.printStackTrace();
             }
         }
 
