@@ -550,6 +550,10 @@ public class EarthPicsViewer {
         }
         String fullOutputFolderName = inputs[1];
 
+        String docName = "Photo Locations";
+        if(inputs[2] != null && !inputs[2].equals(""))
+            docName = inputs[2];
+
         ArrayList<String> fnl = listFilesForFolder(inputDir, 0);
 
         if (inputs[1] == null || inputs[1].equals("")) {
@@ -565,7 +569,7 @@ public class EarthPicsViewer {
         }
 
         final Kml kml = new Kml();
-        Document doc = kml.createAndSetDocument().withName("Picture Locations").withOpen(true);
+        Document doc = kml.createAndSetDocument().withName(docName).withOpen(true);
         int cores = Runtime.getRuntime().availableProcessors();
 
         // create the list of picture metadata records
@@ -593,18 +597,6 @@ public class EarthPicsViewer {
         Timestamp beforeTime = new Timestamp(System.currentTimeMillis());
         //Timestamp beforeTime = new Timestamp(Long.MAX_VALUE);
         try {
-            if (inputs[2] != null && inputs[2].length() > 0) {
-                if (inputs[2].split( " ").length == 1) {
-                    dateF = new SimpleDateFormat("MM/dd/yyyy");
-                } else if(inputs[2].split( ":").length == 1) {
-                    dateF = new SimpleDateFormat("MM/dd/yyyy HH");
-                } else if(inputs[2].split( ":").length == 2) {
-                    dateF = new SimpleDateFormat("MM/dd/yyyy HH:mm");
-                } else if(inputs[2].split( ":").length == 3) {
-                    dateF = new SimpleDateFormat("MM/dd/yyyy HH:mm:ss");
-                }
-                afterTime = new Timestamp(dateF.parse(inputs[2]).getTime());
-            }
             if (inputs[3] != null && inputs[3].length() > 0) {
                 if (inputs[3].split(" ").length == 1) {
                     dateF = new SimpleDateFormat("MM/dd/yyyy");
@@ -615,7 +607,19 @@ public class EarthPicsViewer {
                 } else if (inputs[3].split(":").length == 3) {
                     dateF = new SimpleDateFormat("MM/dd/yyyy HH:mm:ss");
                 }
-                beforeTime = new Timestamp(dateF.parse(inputs[3]).getTime());
+                afterTime = new Timestamp(dateF.parse(inputs[3]).getTime());
+            }
+            if (inputs[4] != null && inputs[4].length() > 0) {
+                if (inputs[4].split(" ").length == 1) {
+                    dateF = new SimpleDateFormat("MM/dd/yyyy");
+                } else if (inputs[4].split(":").length == 1) {
+                    dateF = new SimpleDateFormat("MM/dd/yyyy HH");
+                } else if (inputs[4].split(":").length == 2) {
+                    dateF = new SimpleDateFormat("MM/dd/yyyy HH:mm");
+                } else if (inputs[4].split(":").length == 3) {
+                    dateF = new SimpleDateFormat("MM/dd/yyyy HH:mm:ss");
+                }
+                beforeTime = new Timestamp(dateF.parse(inputs[4]).getTime());
             }
         } catch (ParseException e) {
             System.out.println("Earliest or Latest Time not understood");
@@ -640,8 +644,10 @@ public class EarthPicsViewer {
                 inputForm.messageAppendLn(e.getMessage());
                 System.out.println("Read Error on file " + fn);
                 System.out.println(e.getMessage());
-                if (!(e instanceof ImageReadException)) return;
-                else e.printStackTrace();
+                if (!(e instanceof ImageReadException)){
+                    e.printStackTrace();
+                    return;
+                }
             }
         }
 
@@ -664,7 +670,6 @@ public class EarthPicsViewer {
         FilterParameter fp = new FilterParameter();
         fp.addIncludeRegion(Long.MAX_VALUE, Long.MAX_VALUE, afterTime.getTime(),
                 Long.MIN_VALUE, Long.MIN_VALUE, beforeTime.getTime() );
-
 
         ArrayList<Integer> fclusterIdxs = new ArrayList<>();
         {  // temporary data structures used for the input filter
@@ -703,7 +708,7 @@ public class EarthPicsViewer {
         //marshals into file
         boolean marshal = false;
         try {
-            marshal = kml.marshal(new File(fullOutputFolderName,"EarthPicsView.kml"));
+            marshal = kml.marshal(new File(fullOutputFolderName,docName + ".kml"));
         } catch (FileNotFoundException e) {
             //e.getMessage();
         }
