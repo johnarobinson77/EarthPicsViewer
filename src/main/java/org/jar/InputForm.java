@@ -36,6 +36,7 @@ import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.sql.Date;
+import java.sql.Timestamp;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
 
@@ -109,37 +110,45 @@ public class InputForm<messageAppend> extends JPanel {
         }
     }
 
-    public void start(String[] inputs){
+    public void start(String[] inputs) {
         System.out.println(inputs[0] + " " + inputs[1] + " " + inputs[2]
-                + " " + inputs[3]);
+                + " " + inputs[3] + " " + inputs[4]);
         messageAppendLn(inputs[0] + " " + inputs[1] + " " + inputs[2]
-                + " " + inputs[3]);
+                + " " + inputs[3] + " " + inputs[4]);
+        // Handle user input of the date range
         SimpleDateFormat dateF = null;
+        Timestamp afterTime = new Timestamp(0);
+        Timestamp beforeTime = new Timestamp(System.currentTimeMillis());
+        //Timestamp beforeTime = new Timestamp(Long.MAX_VALUE);
         try {
-            if (inputs[2].split( " ").length == 1) {
-                dateF = new SimpleDateFormat("MM/dd/yyyy");
-            } else if(inputs[2].split( ":").length == 1) {
-                dateF = new SimpleDateFormat("MM/dd/yyyy HH");
-            } else if(inputs[2].split( ":").length == 2) {
-                dateF = new SimpleDateFormat("MM/dd/yyyy HH:mm");
-            } else if(inputs[2].split( ":").length == 3) {
-                dateF = new SimpleDateFormat("MM/dd/yyyy HH:mm:ss");
+            if (inputs[3] != null && inputs[3].length() > 0) {
+                if (inputs[3].split(" ").length == 1) {
+                    dateF = new SimpleDateFormat("MM/dd/yyyy");
+                } else if (inputs[3].split(":").length == 1) {
+                    dateF = new SimpleDateFormat("MM/dd/yyyy HH");
+                } else if (inputs[3].split(":").length == 2) {
+                    dateF = new SimpleDateFormat("MM/dd/yyyy HH:mm");
+                } else if (inputs[3].split(":").length == 3) {
+                    dateF = new SimpleDateFormat("MM/dd/yyyy HH:mm:ss");
+                }
+                afterTime = new Timestamp(dateF.parse(inputs[3]).getTime());
             }
-            Date date = (Date) dateF.parse(inputs[2]);
-            messageAppendLn("->"+date.toString());
-            if (inputs[3].split( " ").length == 1) {
-                dateF = new SimpleDateFormat("MM/dd/yyyy");
-            } else if(inputs[3].split( ":").length == 1) {
-                dateF = new SimpleDateFormat("MM/dd/yyyy HH");
-            } else if(inputs[3].split( ":").length == 2) {
-                dateF = new SimpleDateFormat("MM/dd/yyyy HH:mm");
-            } else if(inputs[3].split( ":").length == 3) {
-                dateF = new SimpleDateFormat("MM/dd/yyyy HH:mm:ss");
+            if (inputs[4] != null && inputs[4].length() > 0) {
+                if (inputs[4].split(" ").length == 1) {
+                    dateF = new SimpleDateFormat("MM/dd/yyyy");
+                } else if (inputs[4].split(":").length == 1) {
+                    dateF = new SimpleDateFormat("MM/dd/yyyy HH");
+                } else if (inputs[4].split(":").length == 2) {
+                    dateF = new SimpleDateFormat("MM/dd/yyyy HH:mm");
+                } else if (inputs[4].split(":").length == 3) {
+                    dateF = new SimpleDateFormat("MM/dd/yyyy HH:mm:ss");
+                }
+                beforeTime = new Timestamp(dateF.parse(inputs[4]).getTime());
             }
-            date = (Date) dateF.parse(inputs[3]);
-            messageAppendLn("-->" + date.toString());
         } catch (ParseException e) {
-            messageAppendLn("Parse error on dates");
+            System.out.println("Earliest or Latest Time not understood");
+            messageAppendLn("Earliest or Latest Time not understood");
+            return;
         }
     }
 
@@ -158,13 +167,14 @@ public class InputForm<messageAppend> extends JPanel {
     }
 
     public void getUserInput() {
-        final String[] labels = { "Picture Directory", "KML Directory", "Earliest Time", "Latest Time" };
-        final int[] widths = { 20, 20, 20, 20 };
+        final String[] labels = { "Picture Directory", "KML Directory", "Document Title", "Earliest Time", "Latest Time" };
+        final int[] widths = { 20, 20, 20, 20, 20 };
         final String[] descs = { "Input Picture Directory",
                 "Output KML Directory",
+                "Name of KML file and document title",
                 "Earliest Time [mm/dd/yyy hh:mm:ss] (Optional)",
                 "Latest Time [mm/dd/yyy hh:mm:ss] (Optional)" };
-        final char[] mnemonics = {'P', 'K', 'E', 'L'};
+        final char[] mnemonics = {'P', 'K', 'D', 'E', 'L'};
 
         JButton fromDir = new JButton("choose");
         fromDir.addActionListener(new ActionListener() {
@@ -180,29 +190,33 @@ public class InputForm<messageAppend> extends JPanel {
             }
         });
 
+        JButton documentName = new JButton("default");
+        documentName.addActionListener(new ActionListener() {
+            public void actionPerformed(ActionEvent e) {
+                fields[2].setText("Photo Locations");
+            }
+        });
         JButton clearAfterTime = new JButton("clear");
         clearAfterTime.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
-                fields[2].setText("");
-                //form.fields[2].repaint();
+                fields[3].setText("");
             }
         });
-        JButton clearBeforTime = new JButton("clear");
-        clearBeforTime.addActionListener(new ActionListener() {
+        JButton clearBeforeTime = new JButton("clear");
+        clearBeforeTime.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
-                fields[3].setText("");
-                //form.fields[3].repaint();
+                fields[4].setText("");
             }
         });
 
-        JButton[] buttons = {fromDir, toDir, clearAfterTime, clearBeforTime};
+        JButton[] buttons = {fromDir, toDir, documentName, clearAfterTime, clearBeforeTime};
         buildTextForm(labels, mnemonics, widths, descs, buttons);
 
         JButton submit = new JButton("Go");
         submit.addActionListener(new ActionListener() {
             public void actionPerformed(ActionEvent e) {
                 String[] inputs = new String[6];
-                for (int i = 0; i<4; i++){
+                for (int i = 0; i<5; i++){
                     inputs[i] = getText(i);
                 }
                 inputs[5] = fileCopy.isSelected() ? "Yes" : "No";
