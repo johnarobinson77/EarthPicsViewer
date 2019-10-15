@@ -16,6 +16,10 @@ Either type in or click the choose button to choose the directory containing the
 
 Either type in or click the choose button to choose the directory where the KML and associated files are to be put.  The directory must already exist.  Note that an icon directory will also be created in that same directory.
 
+#### Document Title
+
+This is the name that will be used for the KML file and the document title when viewed in Google Earth.  Click Default if you don't care what it is called.
+
 #### Earliest Time (Optional)
 
 If desired, EarthPicsViewer will exclude pictures before the time specified in the Earliest Time field.  If the time is not specified, this field is ignored. The full date and time format is [mm/dd/yyyy hh:mm:ss].  The time of day is optional.
