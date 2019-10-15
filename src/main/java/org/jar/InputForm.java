@@ -251,4 +251,4 @@ public class InputForm<messageAppend> extends JPanel {
         f.pack();
         f.setVisible(true);
     }
-}
+} 
