@@ -327,8 +327,8 @@ class DBSCAN_Clusters {
     // this main() function provides a test simple case and usage examples and is not necessary.
     public static void main(String[] args) {
         final Locations locations = new Locations();
-        final int numClusters = 1000;
-        final int numPointsPer = 1000;
+        final int numClusters = 1600;
+        final int numPointsPer = 1600;
         final int clusterSpan = 3;
         final int numDimensions = 3;
         final long searchRad = 1000;
