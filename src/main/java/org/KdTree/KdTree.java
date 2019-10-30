@@ -30,6 +30,7 @@ package org.KdTree;
  */
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -1466,8 +1467,13 @@ public class KdTree<VALUE_TYPE> {
          * that lie within a cutoff distance from a query node in all k dimensions.
          * </p>
          *
-         * @param result - ArrayList to which the values of k-d nodes that lie within the cutoff
-         *               distance of the query node will be added.
+         /**
+         * <p>
+         * The {@code searchKdTree} method searches the k-d tree and finds the KdNodes
+         * that lie within a cutoff distance from a query node in all k dimensions.
+         * </p>
+         *
+         * @param result - ArrayList to the k-d nodes that lie the query hypercube will be added.
          * @param queryPlus - Array containing the lager search bound for each dimension
          * @param queryMinus - Array containing the smaller search bound for each dimension
          * @param permutation - an array that indicates permutation of the reference arrays
@@ -1476,76 +1482,92 @@ public class KdTree<VALUE_TYPE> {
          * @param depth - the depth in the k-d tree
          * @return void
          */
-        void searchKdTree(final List<VALUE_TYPE> result, final long[] queryPlus, final long[] queryMinus,
+        void searchKdTree(final ArrayList<KdNode<VALUE_TYPE>> result, final long[] queryPlus, final long[] queryMinus,
                           final int[] permutation, final ExecutorService executor,
                           final int maximumSubmitDepth, final int depth) {
 
             // Look up the partition.
             final int p = permutation[depth];
-            // get a list ready for the other thread to use
-            List<VALUE_TYPE> threadList = null;
 
-            // If the distance from the query node to the k-d node is within the cutoff distance
-            // in all k dimensions, add the k-d node to a list.
+            // the branchCode will be used later to select the actual branch configuration in the switch statement
+            // below.  0 = no branch, 1 = < branch only, 2 = > branch only, 3 = bothe branches.
+            int branchCode = 0;
 
-            boolean inside = true;
-            for (int i = 0; i < tuple.length; i++) {
-                if ((queryPlus[i]  <= tuple[i]) ||
-                        (queryMinus[i] > tuple[i]) ) {
-                    inside = false;
-                    break;
-                }
-            }
-            if (inside) {
-                result.addAll(this.value);
-            }
-
-            // Search the < branch of the k-d tree if the partition coordinate of the query point minus
-            // the cutoff distance is <= the partition coordinate of the k-d node. The < branch
+            // Search the < branch of the k-d tree if the partition coordinate of the queryPlus is
+            // <= the partition coordinate of the k-d node.  The < branch
             // must be searched when the cutoff distance equals the partition coordinate because the super
             // key may assign a point to either branch of the tree if the sorting or partition coordinate,
             // which forms the most significant portion of the super key, shows equality.
-            Future<List<VALUE_TYPE>> future = null;
-            if (ltChild != null) {
-                if (queryMinus[p] <= tuple[p]) {
-
-                    // Search the < branch with a child thread at as many levels of the tree as possible.
-                    // Create the child threads as high in the tree as possible for greater utilization.
-                    // If maxSubmitDepth == -1, there are no child threads.
-                    if (maximumSubmitDepth > -1 && depth <= maximumSubmitDepth) {
-                        threadList = new ArrayList<>();
-                        future =
-                                executor.submit( ltChild.searchKdTreeWithThread(threadList, queryPlus, queryMinus,
-                                        permutation, executor, maximumSubmitDepth, depth + 1) );
-                    } else {
-                        ltChild.searchKdTree(result, queryPlus, queryMinus, permutation, executor, maximumSubmitDepth,depth + 1);
+            if (queryMinus[p] <= tuple[p]) {
+                // but only search if the ltChild pointer is not null;
+                if (ltChild != null) branchCode = 1;
+                // Search the > branch of the k-d tree if the partition coordinate of the queryPlus is
+                // >= the partition coordinate of the k-d node.  The < branch
+                // must be searched when the cutoff distance equals the partition coordinate because the super
+                // key may assign a point to either branch of the tree if the sorting or partition coordinate,
+                // which forms the most significant portion of the super key, shows equality.
+                if (queryPlus[p] >= tuple[p]) {
+                    // but only if the gtChild pointer is not null;
+                    if (gtChild != null) branchCode += 2;
+                    // while here check to see if there are values that could be inside the the
+                    // hypercube.
+                    if (value != null){
+                        // If the distance from the query node to the k-d node is within the cutoff distance
+                        // in all k dimensions, add the k-d node to a list.
+                        boolean inside = true;
+                        for (int i = 0; i < tuple.length; i++) {
+                            if ((queryPlus[i]  <= tuple[i]) ||
+                                    (queryMinus[i] > tuple[i]) ) {
+                                inside = false;
+                                break;
+                            }
+                        }
+                        if (inside) {
+                            result.add(this);
+                        }
                     }
                 }
+            } else {
+                if (gtChild != null && queryPlus[p] >= tuple[p]) branchCode = 2;
             }
 
-            // Search the > branch of the k-d tree if the partition coordinate of the query point plus
-            // the cutoff distance is >= the partition coordinate of the k-d node.  Note the transformation
-            // of this test: (query[p] + cut >= tuple[p]) -> (tuple[p] - query[p] <= cut).  The < branch
-            // must be searched when the cutoff distance equals the partition coordinate because the super
-            // key may assign a point to either branch of the tree if the sorting or partition coordinate,
-            // which forms the most significant portion of the super key, shows equality.
-            if (gtChild != null) {
-                if (queryPlus[p] >= tuple[p]) {
-                    gtChild.searchKdTree(result, queryPlus, queryMinus, permutation, executor, maximumSubmitDepth,
-                            depth + 1);
-                }
-            }
+            switch (branchCode) {
+                case 0: // child pointer are both null so just return
+                    return;
+                case 1: // only go down the less than branch
+                    ltChild.searchKdTree(result, queryPlus, queryMinus, permutation, executor, maximumSubmitDepth, depth + 1);
+                    return;
+                case 2: // only go down the greater than branch
+                    gtChild.searchKdTree(result, queryPlus, queryMinus, permutation, executor, maximumSubmitDepth, depth + 1);
+                    return;
+                case 3: // go down both branches
+                    // get a future and another list ready in case a child thread is spawned
+                    Future<List<VALUE_TYPE>> future = null;
+                    ArrayList<KdNode<VALUE_TYPE>> threadResult = null;
+                    // check to see if there is a thread available and descend the less than branch with that thread.
+                    if (maximumSubmitDepth > -1 && depth <= maximumSubmitDepth) {
+                        threadResult = new ArrayList<>();
+                        future =
+                                executor.submit(ltChild.searchKdTreeWithThread(threadResult, queryPlus, queryMinus,
+                                        permutation, executor, maximumSubmitDepth, depth + 1));
+                    } else {
+                        // if no thread, just descend directly
+                        ltChild.searchKdTree(result, queryPlus, queryMinus, permutation, executor, maximumSubmitDepth, depth + 1);
+                    }
 
-            // If a child thread searched the < branch, get the result.
-            if (future != null) {
-                try {
-                    future.get();
-                    result.addAll(threadList);
-                } catch (Exception e) {
-                    throw new RuntimeException( "future exception: " + e.getMessage() );
-                }
+                    gtChild.searchKdTree(result, queryPlus, queryMinus, permutation, executor, maximumSubmitDepth, depth + 1);
+
+                    // If a child thread searched the < branch, get the result.
+                    if (future != null) {
+                        try {
+                            future.get();
+                            result.addAll(threadResult);
+                        } catch (Exception e) {
+                            throw new RuntimeException("future exception: " + e.getMessage());
+                        }
+                    }
+                    return;
             }
-            return;
         }
 
         /**
@@ -1555,8 +1577,7 @@ public class KdTree<VALUE_TYPE> {
          * {@link KdNode#searchKdTree searchKdTree} method.
          * </p>
          *
-         * @param result - ArrayList to which the values of k-d nodes that lie within the cutoff
-         *               distance of the query node will be added.
+         * @param result - ArrayList to which the k-d nodes that lie within the hypercube will be added.
          * @param queryPlus - Array containing the lager search bound for each dimension
          * @param queryMinus - Array containing the smaller search bound for each dimension
          * @param permutation - an array that indicates permutation of the reference arrays
@@ -1566,7 +1587,7 @@ public class KdTree<VALUE_TYPE> {
          * @return a {@link java.util.List List}{@code <}{@link KdNode}{@code >}
          * that contains the k-d nodes that lie within the cutoff distance of the query node
          */
-        private Callable searchKdTreeWithThread(final List<VALUE_TYPE> result, final long[] queryPlus, final long[] queryMinus, final int[] permutation,
+        private Callable searchKdTreeWithThread(final ArrayList<KdNode<VALUE_TYPE>> result, final long[] queryPlus, final long[] queryMinus, final int[] permutation,
                                                 final ExecutorService executor, final int maximumSubmitDepth,
                                                 final int depth) {
             return new Callable() {
@@ -1592,10 +1613,10 @@ public class KdTree<VALUE_TYPE> {
          * @param executor - a {@link java.util.concurrent.ExecutorService ExecutorService}
          * @param maximumSubmitDepth - the maximum tree depth at which a thread may be launched
          * @param depth - the depth in the k-d tree
-         * @return a code that indicates somthing about the search below.
+         * @return a code that indicates something about the search below.
          *           0 - nothing found or removed
-         *           1 - somthing found and removed but the node returned from is still needed
-         *          -1 - sonthing found and removed the node below is dead so can be pruned.
+         *           1 - something found and removed but the node returned from is still needed
+         *          -1 - something found and removed the node below is dead so can be pruned.
          */
         private int searchAndRemoveKdTree(final List<VALUE_TYPE> result, final long[] queryPlus, final long[] queryMinus, final int[] permutation,
                                           final ExecutorService executor, final int maximumSubmitDepth,
@@ -2109,7 +2130,7 @@ public class KdTree<VALUE_TYPE> {
      * The {@code KdTree} Constructor for KdTree
      * </p>
      *
-     * @param numPoints - Indicates the total number of Kdnodes to be allocated
+     * @param numPoints - Indicates the total number of KdNodes to be allocated
      * @param numPoints - Indicates the dimensionality of each point
      */
     public KdTree(final int numPoints, final int numDimensions){
@@ -2168,6 +2189,21 @@ public class KdTree<VALUE_TYPE> {
         }
         return copyToNode;
     }
+
+    /**
+     * <p>
+     * The {@code getNumDimensions} return the number of dimensions of each tuple, set in the constructor.
+     * </p>
+     */
+    public int getNumDimensions() { return numDimensions; }
+
+    /**
+     * <p>
+     * The {@code size} return the number of tuples added to the tree.
+     * </p>
+     */
+    public int size() { return numPointsInTree; }
+
 
     /**
      * <p>
@@ -2350,23 +2386,13 @@ public class KdTree<VALUE_TYPE> {
                 queryMinus[i] = query[i] - searchDistance;
             }
         }
-        List<VALUE_TYPE> resultValues = new ArrayList<VALUE_TYPE>();
-        root.searchKdTree(resultValues, queryPlus, queryMinus, permutation, executor, maximumSubmitDepth, 0);
-        return resultValues;
-    }
-
-    /**
-     * <p>
-     * The {@code searchAndRemove} search the tree for all nodes contained within the bounds
-     * set by queryPlus and queryMinus and return the values associated with those nodes.  uses multitreading
-     * </p>
-     *
-     * @param queryPlus - Array containing the lager search bound for each dimension
-     * @param queryMinus - Array containing the smaller search bound for each dimension
-     * @returns list of Values found in the search region
-     */
-    public List<VALUE_TYPE> searchTree(final long[] queryPlus, final long[] queryMinus) {
-        return searchTree(queryPlus, queryMinus, true);
+        ArrayList<KdNode<VALUE_TYPE>> results = new ArrayList<KdNode<VALUE_TYPE>>();
+        root.searchKdTree(results, queryPlus, queryMinus, permutation, executor, maximumSubmitDepth, 0);
+        ArrayList<VALUE_TYPE> values = new ArrayList<>();
+        for(KdNode kn : results){
+            values.addAll(kn.value);
+        }
+        return values;
     }
 
     /**
@@ -2377,10 +2403,9 @@ public class KdTree<VALUE_TYPE> {
      *
      * @param queryPlus - Array containing the lager search bound for each dimension
      * @param queryMinus - Array containing the smaller search bound for each dimension
-     * @param useThreads - Use threading established in the setThreads.
      * @returns list of Values found in the search region
      */
-    public List<VALUE_TYPE> searchTree(final long[] queryPlus, final long[] queryMinus, boolean useThreads) {
+    public List<VALUE_TYPE> searchTree(final long[] queryPlus, final long[] queryMinus) {
         // if the tree is not built yet, build it
         if (root == null) {
             buildTree();
@@ -2397,11 +2422,78 @@ public class KdTree<VALUE_TYPE> {
         }
         // search the tree to get the list of values
         List<VALUE_TYPE> resultValues = new ArrayList<VALUE_TYPE>();
-        if (useThreads )
-            root.searchKdTree(resultValues, queryPlus, queryMinus, permutation, executor, maximumSubmitDepth, 0);
-        else
-            root.searchKdTree(resultValues, queryPlus, queryMinus, permutation, executor, -1, 0);
-        return resultValues;
+        ArrayList<KdNode<VALUE_TYPE>> results = new ArrayList<KdNode<VALUE_TYPE>>();
+        root.searchKdTree(results, queryPlus, queryMinus, permutation, executor, maximumSubmitDepth, 0);
+        ArrayList<VALUE_TYPE> values = new ArrayList<>();
+        for(KdNode kn : results){
+            values.addAll(kn.value);
+        }
+        return values;
+    }
+
+
+    /**
+     * <p>
+     * The {@code searchAndRemove} search the tree for all nodes contained within the searchDistanece
+     *  query and return the values associated with those knodes.
+     * </p>
+     *
+     * @param query - Array containing the center point of a search region.  lenth
+     * must match dimensions specified in constructor
+     * @param searchDistance - the distance from the query point to be searched.
+     * @returns list of Values found in the search region
+     */
+    public void searchTree(List<long[]> tuples, List<VALUE_TYPE> values, long query[], long searchDistance) {
+        // if the tree is not built yet, build it
+
+        // calculate the plus and minus arrays while checking for overflow
+        long queryPlus[]  = new long[numDimensions];
+        long queryMinus[] = new long[numDimensions];
+        for (int i=0; i<numDimensions; i++) {
+            if (query[i] > 0 && (Long.MAX_VALUE - query[i]) < searchDistance) {
+                queryPlus[i]  =  Long.MAX_VALUE;
+            } else {
+                queryPlus[i]  =  query[i] + searchDistance;
+            }
+            if ((query[i] < 0) && ((query[i] - Long.MIN_VALUE) < searchDistance)) {
+                queryMinus[i] = Long.MIN_VALUE;
+            } else {
+                queryMinus[i] = query[i] - searchDistance;
+            }
+        }
+        searchTree(tuples, values, queryPlus, queryMinus);
+        return;
+    }
+
+    /**
+     * <p>
+     * The {@code searchTree} search the tree for all nodes contained within the bounds
+     * set by queryPlus and queryMinus and return the values and tuples associated with those nodes.
+     * </p>
+     *
+     * @param tuples - Array that upon return will contain the tuples found within the query BB
+     * @param values - Array that upon return will contain the values found within the query BB
+     * @param queryPlus - Array containing the lager search bound for each dimension
+     * @param queryMinus - Array containing the smaller search bound for each dimension
+     */
+    public void searchTree(List<long[]> tuples, List<VALUE_TYPE> values, final long[] queryPlus, final long[] queryMinus) {
+
+        // check that the values in Plus are > than the values in Minus
+        for(int i = 0;  i < queryMinus.length; i++) {
+            if (queryMinus[i] > queryPlus[i]) {
+                long T = queryMinus[i];
+                queryMinus[i] = queryPlus[i];
+                queryPlus[i] = T;
+            }
+        }
+        ArrayList<KdNode<VALUE_TYPE>> results = new ArrayList<KdNode<VALUE_TYPE>>();
+        root.searchKdTree(results, queryPlus, queryMinus, permutation, executor, maximumSubmitDepth, 0);
+        for(KdNode kn : results){
+            for(Object val : kn.value) {
+                tuples.add(kn.tuple);
+                values.add((VALUE_TYPE) val);
+            }
+        }
     }
 
     /**
@@ -2569,11 +2661,10 @@ public class KdTree<VALUE_TYPE> {
      * Define a simple data set then build a k-d tree.
      * </p>
      */
-    /*
     public static void main(String[] args) {
 
         // Set the defaults then parse the input arguments.
-        int numPoints = 262144;
+        int numPoints = 16*262144;
         int extraPoints = 100;
         int numDimensions = 4;
         int numThreads = 8;
@@ -2635,9 +2726,9 @@ public class KdTree<VALUE_TYPE> {
         }
         myKdTree.buildTree();
 
-        //*****************************
-        // value validity test
-        // *****************************
+        /*****************************
+         // value validity test
+         *****************************/
         // set the bounds of a tre search to return all values
         long[] qp = new long[numPoints];
         long[] qm = new long[numPoints];
@@ -2660,9 +2751,9 @@ public class KdTree<VALUE_TYPE> {
             }
         }
 
-        //*****************************
+        /*****************************
          // search region test
-         //*****************************
+         *****************************/
         // Search the k-d tree for all points that lie within a hypercube centered at the first point.
         final long[] query = myKdTree.kdNodes[0].tuple;
         long searchTime = System.currentTimeMillis();
@@ -2686,12 +2777,19 @@ public class KdTree<VALUE_TYPE> {
         myKdTree.setNumThreads(1);
         List<Integer> kdNodeValuesAlt = myKdTree.searchTree(query, searchDistance);
         if (kdNodeValues.size() != kdNodeValuesAlt.size() || !kdNodeValues.containsAll(kdNodeValuesAlt))
-            System.out.print("Single threaded search does not match multithreaded search");
+            System.out.println("Single threaded search does not match multithreaded search");
         myKdTree.setNumThreads(8);
 
-        //*****************************
+        List<long[]> tuples = new ArrayList<long[]>();
+        kdNodeValuesAlt.clear();
+        myKdTree.searchTree(tuples, kdNodeValuesAlt, query, searchDistance);
+        if (kdNodeValues.size() != kdNodeValuesAlt.size() || !kdNodeValues.containsAll(kdNodeValuesAlt))
+            System.out.println("tuple + value search != value only search");
+
+
+        /*****************************
          // copy constructor test
-        //*****************************
+         *****************************/
         int numKdTreeNodes = myKdTree.root.verifyKdTree(myKdTree.permutation, myKdTree.executor, myKdTree.maximumSubmitDepth, 0);
         long copyTime = System.currentTimeMillis();
         KdTree copiedTree = new KdTree(myKdTree);
@@ -2719,9 +2817,9 @@ public class KdTree<VALUE_TYPE> {
         }
 
 
-        //*****************************
+        /*****************************
          // nearest neighbor test
-        //*****************************
+         *****************************/
 
         // It's not possible to find more nearest neighbors than there are points.
         numNearestNeighbors = Math.min(numNearestNeighbors, numPoints + extraPoints - 1);
@@ -2777,9 +2875,9 @@ public class KdTree<VALUE_TYPE> {
             l1 = l2;
         }
 
-        //*****************************
+        /*****************************
          // search and remove region test
-         //*****************************
+         *****************************/
         // verify the tree before starting
         myKdTree.root.verifyKdTree(myKdTree.permutation, myKdTree.executor, myKdTree.maximumSubmitDepth, 0);
         // call search and remove with the same arguments as the original search
@@ -2802,6 +2900,6 @@ public class KdTree<VALUE_TYPE> {
         System.exit(0);
     }
 
-     */
-
 } //class KdTree
+
+
